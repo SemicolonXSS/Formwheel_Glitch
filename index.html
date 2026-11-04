@@ -6,7 +6,39 @@
 <div class="hud"><div class="stat"><strong id="hp">♥♥♥</strong><small>HP</small></div><div class="stat"><strong id="time">120</strong><small>남은 시간</small></div><div class="stat"><strong id="score">0</strong><small>점수</small></div></div>
 <div class="banner" aria-live="polite"><b id="rule">NORMAL MODE</b><span id="desc">5~10초마다 글리치가 누적되어 끝까지 유지됩니다!</span></div><div class="bar"><div id="progress"></div></div><div class="sub" id="stack" aria-live="polite">활성 글리치: 없음</div><div class="touch-status" id="touchStatus" role="status" aria-live="polite" hidden></div>
 <canvas id="game" width="720" height="460" aria-label="GLITCH 생존 게임"></canvas><div class="actions"><button id="start">▶ 게임 시작</button><button id="pause" disabled>Ⅱ 일시정지</button></div><div class="result" id="result" role="status"></div>
-<div class="pad" aria-label="모바일 이동 버튼"><button data-d="up" aria-label="위">▲</button><button data-d="left" aria-label="왼쪽">◀</button><button data-d="down" aria-label="아래">▼</button><button data-d="right" aria-label="오른쪽">▶</button></div><p class="help">PC: WASD 또는 방향키 · 모바일: 화면의 방향 버튼<br>빨간 장애물을 피하고 ✦ 에너지 조각을 모으세요. HP가 0이면 게임 종료!</p><div class="foot">Formwheel · Semicolon & Secol</div></main>
+<div class="pad" aria-label="모바일 이동 버튼"><button data-d="up" aria-label="위">▲</button><button data-d="left" aria-label="왼쪽">◀</button><button data-d="down" aria-label="아래">▼</button><button data-d="right" aria-label="오른쪽">▶</button></div><p class="help">PC: WASD 또는 방향키 · 모바일: 화면의 방향 버튼<br>빨간 장애물을 피하고 ✦ 에너지 조각을 모으세요. HP가 0이면 게임 종료!</p>
+<style id="rule-mutation-style">
+.mode-picker{display:flex;gap:9px;flex-wrap:wrap;margin:14px 0}.mode-picker button{flex:1;min-width:145px}.mode-picker button[aria-pressed="true"]{background:#a94ce5;border-color:#e3b6ff}.mutation-panel{margin:12px 0;padding:17px;border:1px solid #8464c7;background:#211936;border-radius:16px}.mutation-panel[hidden],.survival-content[hidden]{display:none!important}.mutation-panel h2{margin:0 0 8px}.mutation-rules{padding-left:23px;line-height:1.8;color:#e1d7fa}.mutation-question{font-size:clamp(24px,6vw,38px);font-weight:900;text-align:center;margin:18px 0;padding:17px;background:#34264f;border-radius:12px}.mutation-form{display:flex;gap:8px;flex-wrap:wrap}.mutation-form input{flex:1;min-width:120px;padding:12px;background:#120e24;border:1px solid #a78bfa;color:white;border-radius:10px;font:inherit;font-size:19px}.mutation-status{min-height:45px;margin-top:12px;line-height:1.6}.mutation-status:focus{outline:none}.mutation-progress{color:#9ef5df;font-weight:800}.mutation-panel button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+</style>
+<section aria-label="게임 모드 선택"><div class="mode-picker"><button id="mode-survival" aria-pressed="true" type="button">👾 120초 생존</button><button id="mode-mutation" aria-pressed="false" type="button">🌀 규칙 변이</button></div></section>
+<section id="mutation-panel" class="mutation-panel" hidden aria-label="규칙 변이 게임">
+<h2>🌀 RULE MUTATION</h2><p>7라운드 · 규칙 누적 · 5개 이상 성공 시 승리! 이전 규칙은 계속 유지됩니다.</p>
+<div id="mutation-progress" class="mutation-progress">ROUND 1 / 7 · 성공 0 · 실패 0</div>
+<ol id="mutation-rules" class="mutation-rules"></ol>
+<div id="mutation-question" class="mutation-question"></div>
+<form id="mutation-form" class="mutation-form"><label for="mutation-answer" style="width:100%">변이 규칙을 모두 적용한 최종 답</label><input id="mutation-answer" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" required aria-describedby="mutation-status"><button type="submit" id="mutation-submit">제출</button></form>
+<div id="mutation-status" class="mutation-status" role="status" aria-live="polite"></div>
+<div class="actions"><button id="mutation-next" type="button" hidden>다음 라운드 →</button><button id="mutation-restart" type="button">↻ 처음부터</button></div>
+</section>
+<script id="rule-mutation-script">
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const names=['정답에 1 더하기','결과에 2 곱하기','결과에서 3 빼기','결과를 제곱하기','각 자리 숫자 모두 더하기','결과를 2진수로 바꾸기','2진수의 0과 1을 뒤집기'];
+const rounds=[null,{a:7,b:5,op:'+'},{a:9,b:4,op:'-'},{a:6,b:3,op:'×'},{a:8,b:2,op:'+'},{a:7,b:2,op:'×'},{a:9,b:3,op:'+'},{a:5,b:4,op:'+'}];
+let round=1,wins=0,losses=0,locked=false,finished=false;
+function calculate(r){const q=rounds[r];let n=q.op==='+'?q.a+q.b:q.op==='-'?q.a-q.b:q.a*q.b;const steps=[String(n)];if(r>=1){n++;steps.push('+1 → '+n)}if(r>=2){n*=2;steps.push('×2 → '+n)}if(r>=3){n-=3;steps.push('−3 → '+n)}if(r>=4){n*=n;steps.push('제곱 → '+n)}if(r>=5){n=String(Math.abs(n)).split('').reduce((a,d)=>a+Number(d),0);steps.push('자릿수 합 → '+n)}if(r>=6){n=n.toString(2);steps.push('2진수 → '+n)}if(r>=7){n=n.replace(/[01]/g,c=>c==='0'?'1':'0');steps.push('비트 반전 → '+n)}return {answer:String(n),steps}}
+function render(){locked=false;finished=false;const q=rounds[round];$('mutation-progress').textContent='ROUND '+round+' / 7 · 성공 '+wins+' · 실패 '+losses;$('mutation-rules').replaceChildren(...names.slice(0,round).map(name=>{const li=document.createElement('li');li.textContent=name;return li}));$('mutation-question').textContent=q.a+' '+q.op+' '+q.b+' = ?';$('mutation-answer').value='';$('mutation-answer').disabled=false;$('mutation-submit').disabled=false;$('mutation-next').hidden=true;$('mutation-status').textContent=round===7?'마지막 변이! 2진수 비트를 뒤집어 제출하세요.':'규칙을 위에서 아래 순서대로 적용하세요.'}
+$('mutation-form').addEventListener('submit',e=>{e.preventDefault();if(locked||finished)return;const raw=$('mutation-answer').value.trim();if(!/^[0-9]+$/.test(raw)){$('mutation-status').textContent='숫자만 입력해 주세요.';return}const result=calculate(round);const ok=raw===result.answer;locked=true;if(ok)wins++;else losses++;$('mutation-progress').textContent='ROUND '+round+' / 7 · 성공 '+wins+' · 실패 '+losses;$('mutation-status').textContent=(ok?'✅ 정답!':'❌ 오답! 정답: '+result.answer)+' 계산 과정: '+result.steps.join(' → ');$('mutation-answer').disabled=true;$('mutation-submit').disabled=true;$('mutation-next').hidden=false;$('mutation-next').textContent=round===7?'최종 결과 보기':'다음 라운드 →'});
+$('mutation-next').addEventListener('click',()=>{if(!locked)return;if(round<7){round++;render();return}finished=true;$('mutation-next').hidden=true;$('mutation-status').textContent=(wins>=5?'🏆 승리!':'🌀 도전 종료!')+' 최종 결과: '+wins+'승 '+losses+'패. 다시 시작해서 기록에 도전하세요!'});
+$('mutation-restart').addEventListener('click',()=>{round=1;wins=0;losses=0;render()});
+const survival=$('mode-survival'),mutation=$('mode-mutation'),panel=$('mutation-panel');
+const elements=[$('game'),$('start'),$('pause'),$('result'),document.querySelector('.pad'),document.querySelector('.help'),document.querySelector('.hud'),document.querySelector('.banner'),document.querySelector('.bar'),$('stack'),$('touchStatus')];
+const saved=elements.map(el=>el?el.hidden:false);
+function setMode(which){const m=which==='mutation';panel.hidden=!m;survival.setAttribute('aria-pressed',String(!m));mutation.setAttribute('aria-pressed',String(m));elements.forEach((el,i)=>{if(el)el.hidden=m||saved[i]});if(m){if(!$('pause').disabled&&$('pause').textContent.includes('일시정지'))$('pause').click();$('mutation-answer').focus()}}
+survival.addEventListener('click',()=>setMode('survival'));mutation.addEventListener('click',()=>setMode('mutation'));render();
+})();
+</script>
+<div class="foot">Formwheel · Semicolon & Secol</div></main>
 <script>
 (()=>{'use strict';
 const cv=document.getElementById('game'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height,$=id=>document.getElementById(id),keys=new Set();
