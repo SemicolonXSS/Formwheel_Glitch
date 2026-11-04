@@ -24,18 +24,37 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
 const names=['정답에 1 더하기','결과에 2 곱하기','결과에서 3 빼기','결과를 제곱하기','각 자리 숫자 모두 더하기','결과를 2진수로 바꾸기','2진수의 0과 1을 뒤집기'];
-const rounds=[null,{a:7,b:5,op:'+'},{a:9,b:4,op:'-'},{a:6,b:3,op:'×'},{a:8,b:2,op:'+'},{a:7,b:2,op:'×'},{a:9,b:3,op:'+'},{a:5,b:4,op:'+'}];
-let round=1,wins=0,losses=0,locked=false,finished=false;
-function calculate(r){const q=rounds[r];let n=q.op==='+'?q.a+q.b:q.op==='-'?q.a-q.b:q.a*q.b;const steps=[String(n)];if(r>=1){n++;steps.push('+1 → '+n)}if(r>=2){n*=2;steps.push('×2 → '+n)}if(r>=3){n-=3;steps.push('−3 → '+n)}if(r>=4){n*=n;steps.push('제곱 → '+n)}if(r>=5){n=String(Math.abs(n)).split('').reduce((a,d)=>a+Number(d),0);steps.push('자릿수 합 → '+n)}if(r>=6){n=n.toString(2);steps.push('2진수 → '+n)}if(r>=7){n=n.replace(/[01]/g,c=>c==='0'?'1':'0');steps.push('비트 반전 → '+n)}return {answer:String(n),steps}}
-function render(){locked=false;finished=false;const q=rounds[round];$('mutation-progress').textContent='ROUND '+round+' / 7 · 성공 '+wins+' · 실패 '+losses;$('mutation-rules').replaceChildren(...names.slice(0,round).map(name=>{const li=document.createElement('li');li.textContent=name;return li}));$('mutation-question').textContent=q.a+' '+q.op+' '+q.b+' = ?';$('mutation-answer').value='';$('mutation-answer').disabled=false;$('mutation-submit').disabled=false;$('mutation-next').hidden=true;$('mutation-status').textContent=round===7?'마지막 변이! 2진수 비트를 뒤집어 제출하세요.':'규칙을 위에서 아래 순서대로 적용하세요.'}
-$('mutation-form').addEventListener('submit',e=>{e.preventDefault();if(locked||finished)return;const raw=$('mutation-answer').value.trim();if(!/^[0-9]+$/.test(raw)){$('mutation-status').textContent='숫자만 입력해 주세요.';return}const result=calculate(round);const ok=raw===result.answer;locked=true;if(ok)wins++;else losses++;$('mutation-progress').textContent='ROUND '+round+' / 7 · 성공 '+wins+' · 실패 '+losses;$('mutation-status').textContent=(ok?'✅ 정답!':'❌ 오답! 정답: '+result.answer)+' 계산 과정: '+result.steps.join(' → ');$('mutation-answer').disabled=true;$('mutation-submit').disabled=true;$('mutation-next').hidden=false;$('mutation-next').textContent=round===7?'최종 결과 보기':'다음 라운드 →'});
-$('mutation-next').addEventListener('click',()=>{if(!locked)return;if(round<7){round++;render();return}finished=true;$('mutation-next').hidden=true;$('mutation-status').textContent=(wins>=5?'🏆 승리!':'🌀 도전 종료!')+' 최종 결과: '+wins+'승 '+losses+'패. 다시 시작해서 기록에 도전하세요!'});
-$('mutation-restart').addEventListener('click',()=>{round=1;wins=0;losses=0;render()});
+const pick=a=>a[Math.floor(Math.random()*a.length)],num=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=num(0,i);[a[i],a[j]]=[a[j],a[i]]}return a};
+const facts=[
+['지구는 태양 주위를 돈다.',true],['달은 스스로 빛을 낸다.',false],['태양은 지구보다 크다.',true],
+['물은 일반적인 대기압에서 100°C에 끓는다.',true],['삼각형의 내각의 합은 360도이다.',false],
+['소수 2는 짝수이다.',true],['1은 소수이다.',false],['금성은 태양계의 행성이다.',true],
+['지구에는 자연 위성이 두 개 있다.',false],['빛은 소리보다 빠르다.',true],
+['모든 정사각형은 직사각형이다.',true],['모든 직사각형은 정사각형이다.',false]
+];
+function makeQuestion(type){
+let a,b,op,base,prompt;
+if(type==='math'){a=num(2,18);b=num(2,12);op=pick(['+','−','×']);base=op==='+'?a+b:op==='−'?a-b:a*b;prompt=a+' '+op+' '+b+' = ?'}
+else if(type==='truth'){const [sentence,truth]=pick(facts);base=truth?1:0;prompt='참·거짓: '+sentence}
+else if(type==='compare'){a=num(1,30);b=num(1,30);op=pick(['>','<','=']);base=(op==='>'?a>b:op==='<'?a<b:a===b)?1:0;prompt='참·거짓: '+a+' '+op+' '+b}
+else if(type==='pattern'){a=num(1,8);b=num(1,5);const length=num(3,5);const seq=Array.from({length},(_,i)=>a+i*b);base=a+length*b;prompt='규칙 찾기: '+seq.join(', ')+', ?'}
+else if(type==='parity'){a=num(10,99);base=a%2===0?1:0;prompt='참·거짓: '+a+'는 짝수이다.'}
+else {a=num(2,9);b=num(2,9);const target=a*b;const offset=pick([-2,-1,1,2]);base=0;prompt='참·거짓: '+a+' × '+b+' = '+(target+offset)}
+return {type,prompt,base};
+}
+let questions=[],round=1,wins=0,losses=0,locked=false,finished=false;
+function newQuestions(){const types=shuffle(['math','truth','compare','pattern','parity','equation','math']);questions=[null,...types.map(makeQuestion)]}
+function calculate(r){let n=questions[r].base;const steps=['기본 정답 '+n];if(r>=1){n++;steps.push('+1 = '+n)}if(r>=2){n*=2;steps.push('×2 = '+n)}if(r>=3){n-=3;steps.push('−3 = '+n)}if(r>=4){n*=n;steps.push('제곱 = '+n)}if(r>=5){n=String(Math.abs(n)).split('').reduce((a,d)=>a+Number(d),0);steps.push('자릿수 합 = '+n)}if(r>=6){n=n.toString(2);steps.push('2진수 = '+n)}if(r>=7){n=n.replace(/[01]/g,c=>c==='0'?'1':'0');steps.push('비트 반전 = '+n)}return {answer:String(n),steps}}
+function render(){locked=false;finished=false;const q=questions[round];$('mutation-progress').textContent='ROUND '+round+' / 7 · 성공 '+wins+' · 실패 '+losses;$('mutation-rules').replaceChildren(...names.slice(0,round).map(name=>{const li=document.createElement('li');li.textContent=name;return li}));$('mutation-question').textContent=q.prompt;$('mutation-answer').value='';$('mutation-answer').disabled=false;$('mutation-submit').disabled=false;$('mutation-next').hidden=true;$('mutation-status').textContent=(q.type==='truth'||q.type==='compare'||q.type==='parity'||q.type==='equation'?'참 = 1, 거짓 = 0. ':'')+'기본 답을 구한 뒤 위 규칙을 순서대로 적용하세요.'}
+$('mutation-form').addEventListener('submit',e=>{e.preventDefault();if(locked||finished)return;const raw=$('mutation-answer').value.trim();if(!/^[0-9]+$/.test(raw)){$('mutation-status').textContent='숫자만 입력해 주세요. (2진수도 숫자 0과 1만 사용)';return}const result=calculate(round);const ok=raw===result.answer;locked=true;if(ok)wins++;else losses++;$('mutation-progress').textContent='ROUND '+round+' / 7 · 성공 '+wins+' · 실패 '+losses;$('mutation-status').textContent=(ok?'✅ 정답!':'❌ 오답! 정답: '+result.answer)+' · 계산 과정: '+result.steps.join(' → ');$('mutation-answer').disabled=true;$('mutation-submit').disabled=true;$('mutation-next').hidden=false;$('mutation-next').textContent=round===7?'최종 결과 보기':'다음 라운드 →'});
+$('mutation-next').addEventListener('click',()=>{if(!locked)return;if(round<7){round++;render();return}finished=true;$('mutation-next').hidden=true;$('mutation-status').textContent=(wins>=5?'🏆 승리!':'🌀 도전 종료!')+' 최종 결과: '+wins+'승 '+losses+'패. 재도전하면 새로운 문제가 나옵니다!'});
+$('mutation-restart').addEventListener('click',()=>{round=1;wins=0;losses=0;newQuestions();render()});
 const survival=$('mode-survival'),mutation=$('mode-mutation'),panel=$('mutation-panel');
 const elements=[$('game'),$('start'),$('pause'),$('result'),document.querySelector('.pad'),document.querySelector('.help'),document.querySelector('.hud'),document.querySelector('.banner'),document.querySelector('.bar'),$('stack'),$('touchStatus')];
 const saved=elements.map(el=>el?el.hidden:false);
 function setMode(which){const m=which==='mutation';panel.hidden=!m;survival.setAttribute('aria-pressed',String(!m));mutation.setAttribute('aria-pressed',String(m));elements.forEach((el,i)=>{if(el)el.hidden=m||saved[i]});if(m){if(!$('pause').disabled&&$('pause').textContent.includes('일시정지'))$('pause').click();$('mutation-answer').focus()}}
-survival.addEventListener('click',()=>setMode('survival'));mutation.addEventListener('click',()=>setMode('mutation'));render();
+survival.addEventListener('click',()=>setMode('survival'));mutation.addEventListener('click',()=>setMode('mutation'));newQuestions();render();
 })();
 </script>
 <div class="foot">Formwheel · Semicolon & Secol</div></main>
