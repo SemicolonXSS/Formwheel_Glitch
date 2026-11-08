@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CHAOS SPRINT | Formwheel Glitch</title>
+<meta name="description" content="Formwheel Glitch의 새로운 60초 CHAOS SPRINT 모드">
+<link rel="icon" href="https://semicolonxss.github.io/Formwheel/assets/formwheel-favicon.svg">
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif}*{box-sizing:border-box}
+body{margin:0;color:#f7f2ff;background:radial-gradient(circle at 50% 0%,#4a226b,#100c22 70%);min-height:100vh}
+main{max-width:850px;margin:auto;padding:22px 14px}a{color:#b5ffee}.head{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+h1{font-size:clamp(28px,7vw,45px);margin:18px 0 6px;color:#a9ffea;letter-spacing:.04em}
+p{color:#d5cce8}.hud{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:14px 0}
+.stat,.rule{border:1px solid #655195;border-radius:13px;background:#2a2044;padding:12px;text-align:center}
+.stat strong{display:block;font-size:26px}.stat small{color:#d4c7f3}.rule{min-height:78px;line-height:1.6}
+.rule b{display:block;color:#a9ffea;font-size:19px}
+.bar{height:9px;background:#35264f;overflow:hidden;border-radius:10px;margin:10px 0 13px}.bar div{height:100%;width:100%;background:linear-gradient(90deg,#70fbe9,#e17aff)}
+canvas{display:block;width:100%;height:auto;aspect-ratio:720/460;background:#17132d;border:2px solid #7354ae;border-radius:15px;touch-action:none}
+.actions{display:flex;flex-wrap:wrap;justify-content:center;gap:9px;margin:14px 0}
+button{border:1px solid #a997ff;background:#7653d8;color:white;padding:12px 17px;border-radius:11px;font:700 15px system-ui;cursor:pointer}
+button:focus-visible,a:focus-visible{outline:3px solid #a9ffea;outline-offset:3px}
+button:disabled{opacity:.5;cursor:not-allowed}.pad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,54px);gap:8px;justify-content:center;margin:12px auto}
+.pad button{touch-action:none;user-select:none;padding:7px}.pad [data-dir=up]{grid-column:2}.pad [data-dir=left]{grid-column:1;grid-row:2}.pad [data-dir=down]{grid-column:2;grid-row:2}.pad [data-dir=right]{grid-column:3;grid-row:2}
+#result{min-height:30px;text-align:center;font-weight:800;color:#a9ffea}
+.note{font-size:13px;line-height:1.6;text-align:center}#best{font-size:13px}
+@media(min-width:700px){.pad{display:none}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style></head><body><main>
+<div class="head"><a href="./">← Glitch 모드 선택</a><a href="https://semicolonxss.github.io/Formwheel/">Formwheel Hub</a></div>
+<h1>⚡ CHAOS SPRINT</h1><p>60초 속도전 · 8초마다 새로운 글리치 · 에너지 조각 수집!</p>
+<div class="hud"><div class="stat"><strong id="hp">♥♥♥</strong><small>체력</small></div><div class="stat"><strong id="time">60</strong><small>남은 시간</small></div><div class="stat"><strong id="score">0</strong><small>점수</small></div></div>
+<div class="rule" aria-live="polite"><b id="rule">준비 완료</b><span id="description">시작 버튼을 눌러 플레이하세요.</span></div><div class="bar"><div id="progress"></div></div>
+<canvas id="game" width="720" height="460" aria-label="카오스 스프린트 게임 화면"></canvas>
+<div class="actions"><button id="start">▶ 시작</button><button id="pause" disabled>Ⅱ 일시정지</button></div>
+<div id="result" role="status" aria-live="polite"></div><p id="best" class="note">최고 점수: 0</p>
+<div class="pad" aria-label="모바일 조작"><button data-dir="up" aria-label="위">▲</button><button data-dir="left" aria-label="왼쪽">◀</button><button data-dir="down" aria-label="아래">▼</button><button data-dir="right" aria-label="오른쪽">▶</button></div>
+<p class="note">WASD / 방향키 / 모바일 방향 버튼으로 이동하세요. 빨간 장애물을 피하고 민트색 다이아몬드를 모으세요. 글리치 효과는 8초마다 바뀌며 중첩되지 않습니다.</p>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id),canvas=$('game'),ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;
+const keys=new Set(),mods=[['normal','안정 구간','기본 속도와 장애물'],['reverse','조작 반전','이동 방향이 반대가 됩니다'],['rush','장애물 폭주','적이 더 자주 등장합니다'],['fast','하이퍼 스피드','이동 속도가 빨라집니다'],['slow','슬로 모션','이동 속도가 느려집니다'],['bonus','에너지 보너스','에너지 점수가 두 배!'],['tiny','작아진 플레이어','캐릭터가 작아집니다'],['fog','시야 제한','플레이어 주변만 보입니다']];
+const rand=(a,b)=>a+Math.random()*(b-a),clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+let running=false,paused=false,elapsed=0,last=0,raf=0,score=0,hp=3,inv=0,spawn=0,gemTimer=0,mode=mods[0],modeIndex=0,player={x:W/2,y:H/2,r:13},enemies=[],gems=[];
+let best=0;try{best=Number(localStorage.getItem('fw-glitch-chaos-sprint-best-v1'))||0}catch{}
+$('best').textContent='CHAOS SPRINT 최고 점수: '+best+' (이 기기)';
+function addGem(){for(let i=0;i<20;i++){const g={x:rand(22,W-22),y:rand(22,H-22),r:9};if(Math.hypot(g.x-player.x,g.y-player.y)>70){gems.push(g);return}}}
+function changeMode(){const choices=mods.filter(m=>m[0]!==mode[0]);mode=choices[Math.floor(Math.random()*choices.length)];$('rule').textContent=mode[1];$('description').textContent=mode[2];modeIndex++}
+function hud(){$('hp').textContent='♥'.repeat(Math.max(0,hp))+'♡'.repeat(3-Math.max(0,hp));$('time').textContent=Math.ceil(Math.max(0,60-elapsed));$('score').textContent=Math.floor(score);$('progress').style.width=(100-(elapsed%8)/8*100)+'%'}
+function start(){cancelAnimationFrame(raf);running=true;paused=false;elapsed=score=spawn=gemTimer=inv=0;hp=3;mode=mods[0];modeIndex=0;player={x:W/2,y:H/2,r:13};enemies=[];gems=[];keys.clear();for(let i=0;i<3;i++)addGem();$('start').textContent='↻ 다시 시작';$('pause').disabled=false;$('pause').textContent='Ⅱ 일시정지';$('result').textContent='';$('rule').textContent='안정 구간';$('description').textContent='첫 글리치까지 8초';last=performance.now();hud();raf=requestAnimationFrame(loop)}
+function finish(victory){running=false;cancelAnimationFrame(raf);$('pause').disabled=true;keys.clear();const final=Math.floor(score);$('result').textContent=(victory?'🏆 60초 생존 성공! ':'💥 도전 종료! ')+final+'점';if(final>best){best=final;try{localStorage.setItem('fw-glitch-chaos-sprint-best-v1',String(best))}catch{}$('best').textContent='CHAOS SPRINT 최고 점수: '+best+' (이 기기)'}}
+function enemy(){const side=Math.floor(rand(0,4)),e={x:0,y:0,r:13,vx:0,vy:0};if(side===0){e.x=-18;e.y=rand(10,H-10)}else if(side===1){e.x=W+18;e.y=rand(10,H-10)}else if(side===2){e.x=rand(10,W-10);e.y=-18}else{e.x=rand(10,W-10);e.y=H+18}const angle=Math.atan2(player.y-e.y,player.x-e.x),speed=rand(105,160);e.vx=Math.cos(angle)*speed;e.vy=Math.sin(angle)*speed;enemies.push(e)}
+function update(dt){
+ const previous=elapsed;elapsed=Math.min(60,elapsed+dt);
+ if(Math.floor(previous/8)!==Math.floor(elapsed/8)&&elapsed<60)changeMode();
+ const kind=mode[0];player.r=kind==='tiny'?8:13;
+ let dx=Number(keys.has('right'))-Number(keys.has('left')),dy=Number(keys.has('down'))-Number(keys.has('up'));
+ if(kind==='reverse'){dx=-dx;dy=-dy}const mag=Math.hypot(dx,dy)||1,spd=210*(kind==='fast'?1.6:kind==='slow'?.65:1);
+ player.x=clamp(player.x+dx/mag*spd*dt,player.r,W-player.r);player.y=clamp(player.y+dy/mag*spd*dt,player.r,H-player.r);
+ spawn+=dt;gemTimer+=dt;inv=Math.max(0,inv-dt);
+ const spawnRate=kind==='rush'?.36:Math.max(.65,1.25-elapsed*.008);
+ if(spawn>=spawnRate){spawn=0;enemy()}
+ if(gemTimer>=2.6&&gems.length<5){gemTimer=0;addGem()}
+ for(const e of enemies){e.x+=e.vx*dt;e.y+=e.vy*dt;if(inv===0&&Math.hypot(e.x-player.x,e.y-player.y)<e.r+player.r){hp--;inv=1.2}}
+ enemies=enemies.filter(e=>e.x>-45&&e.x<W+45&&e.y>-45&&e.y<H+45);
+ gems=gems.filter(g=>{if(Math.hypot(g.x-player.x,g.y-player.y)<g.r+player.r){score+=kind==='bonus'?40:20;return false}return true});
+ score+=dt*2;hud();if(hp<=0)finish(false);else if(elapsed>=60)finish(true)
+}
+function draw(){ctx.fillStyle='#17132d';ctx.fillRect(0,0,W,H);ctx.strokeStyle='#30264e';ctx.lineWidth=1;for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+ for(const g of gems){ctx.fillStyle='#89ffe2';ctx.beginPath();ctx.moveTo(g.x,g.y-11);ctx.lineTo(g.x+10,g.y);ctx.lineTo(g.x,g.y+11);ctx.lineTo(g.x-10,g.y);ctx.fill()}
+ for(const e of enemies){ctx.fillStyle='#ff5379';ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,Math.PI*2);ctx.fill()}
+ if(inv===0||Math.floor(inv*8)%2===0){ctx.fillStyle='#ae91ff';ctx.shadowColor='#bfa9ff';ctx.shadowBlur=18;ctx.beginPath();ctx.arc(player.x,player.y,player.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0}
+ if(mode[0]==='fog'&&running){ctx.save();ctx.fillStyle='#0b0924de';ctx.fillRect(0,0,W,H);ctx.globalCompositeOperation='destination-out';const glow=ctx.createRadialGradient(player.x,player.y,20,player.x,player.y,130);glow.addColorStop(0,'black');glow.addColorStop(1,'transparent');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(player.x,player.y,130,0,Math.PI*2);ctx.fill();ctx.restore()}
+}
+function loop(now){if(!running)return;const dt=Math.min(.05,Math.max(0,(now-last)/1000));last=now;if(!paused)update(dt);draw();if(running)raf=requestAnimationFrame(loop)}
+function toggle(){if(!running)return;paused=!paused;$('pause').textContent=paused?'▶ 계속하기':'Ⅱ 일시정지';last=performance.now();keys.clear()}
+const map={arrowup:'up',arrowdown:'down',arrowleft:'left',arrowright:'right',w:'up',a:'left',s:'down',d:'right'};
+document.addEventListener('keydown',e=>{if(e.target.closest('input,textarea,select,[contenteditable=true]'))return;const d=map[e.key.toLowerCase()];if(d){e.preventDefault();keys.add(d)}if(e.key==='Escape'&&running)toggle()});
+document.addEventListener('keyup',e=>{const d=map[e.key.toLowerCase()];if(d)keys.delete(d)});
+document.querySelectorAll('[data-dir]').forEach(b=>{const d=b.dataset.dir;b.addEventListener('pointerdown',e=>{e.preventDefault();keys.add(d);b.setPointerCapture(e.pointerId)});for(const type of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(type,()=>keys.delete(d))});
+window.addEventListener('blur',()=>{keys.clear();if(running&&!paused)toggle()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){keys.clear();if(running&&!paused)toggle()}});
+$('start').onclick=start;$('pause').onclick=toggle;draw();hud();
+})();
+</script></main></body></html>
