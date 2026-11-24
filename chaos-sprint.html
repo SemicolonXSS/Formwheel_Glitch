@@ -34,7 +34,7 @@ button{font:700 16px system-ui;cursor:pointer}
 <div class="progress"><div id="progress"></div></div>
 <div class="rule"><b id="rule">준비 완료</b><span id="description">빛나는 칸들을 순서대로 기억하세요. 매 라운드 변환 규칙이 바뀝니다.</span></div>
 <div id="phase" role="status" aria-live="polite">게임 시작을 누르세요</div>
-<div class="grid" id="grid" aria-label="3행 3열 해킹 입력판"></div>
+<div role="group" class="grid" id="grid" aria-label="3행 3열 해킹 입력판"></div>
 <div class="controls"><button class="control" id="start">▶ 게임 시작</button><button class="control" id="replay" disabled>🔁 순서 다시 보기 (-10점)</button></div>
 <div id="message" role="status" aria-live="polite"></div>
 <p id="best">최고 점수: 0</p>
@@ -60,7 +60,7 @@ const step=740;sequence.forEach((n,i)=>{schedule(()=>{if(epoch===id)buttons[n].c
 schedule(()=>{if(epoch!==id)return;state='input';$('phase').textContent='⌨️ 변환 규칙을 적용해 입력!';$('message').textContent=mods[mod].desc;buttons.forEach(b=>b.disabled=false);$('replay').disabled=score<10},350+sequence.length*step)}
 function nextRound(){if(state==='ended')return;round++;mod=round===1?0:Math.floor(Math.random()*mods.length);const length=Math.min(8,2+Math.floor((round-1)/2));sequence=Array.from({length},()=>Math.floor(Math.random()*9));expected=transform(sequence,mods[mod]);$('rule').textContent='ROUND '+round+' · '+mods[mod].title;$('description').textContent=mods[mod].desc;playback()}
 function enter(n){if(state!=='input')return;if(n===expected[position]){buttons[n].classList.add('answered');schedule(()=>buttons[n].classList.remove('answered'),170);position++;if(position===expected.length){score+=20+round*5;refresh();state='between';buttons.forEach(b=>b.disabled=true);$('replay').disabled=true;$('message').textContent='✅ 해킹 성공! +'+(20+round*5)+'점';schedule(()=>{if(state==='between')nextRound()},650)}}else{hp--;refresh();state='between';buttons.forEach(b=>b.disabled=true);$('replay').disabled=true;if(hp<=0){finish();return}$('message').textContent='⚠️ 잘못된 칸! 기회 1개 감소. 새 패턴으로 재도전!';schedule(()=>{if(state==='between')nextRound()},850)}}
-for(let i=0;i<9;i++){const b=document.createElement('button');b.type='button';b.className='tile';b.textContent=String(i+1);b.setAttribute('aria-label',(Math.floor(i/3)+1)+'행 '+(i%3+1)+'열');b.disabled=true;b.addEventListener('click',()=>enter(i));$('grid').append(b);buttons.push(b)}
+for(let i=0;i<9;i++){const b=document.createElement('button');b.type='button';b.className='tile';b.textContent=String(i+1);b.setAttribute('aria-label',(i+1)+' · '+(Math.floor(i/3)+1)+'행 '+(i%3+1)+'열');b.disabled=true;b.addEventListener('click',()=>enter(i));$('grid').append(b);buttons.push(b)}
 function start(){epoch++;cancelShows();clearInterval(timer);round=0;score=0;hp=3;time=TIME;state='between';$('start').textContent='↻ 처음부터';refresh();timer=setInterval(()=>{if(state==='ended')return;time=Math.max(0,time-.1);refresh();if(time<=0)finish()},100);nextRound()}
 $('start').addEventListener('click',start);
 $('replay').addEventListener('click',()=>{if(state!=='input'||score<10)return;score-=10;refresh();playback()});
